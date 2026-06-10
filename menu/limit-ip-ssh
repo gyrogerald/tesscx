@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Sumber file konfigurasi
+if [ -f "/usr/bin/kyt/var.txt" ]; then
+    source /usr/bin/kyt/var.txt
+else
+    echo "Error: File /usr/bin/kyt/var.txt tidak ditemukan!"
+    exit 1
+fi
+
+function send_log(){
+    TIME="10"
+    URL="https://api.telegram.org/bot$BOT_TOKEN/sendMessage"
+    TEXT="<code>────────────────────</code>
+<b>🚨 PELANGGARAN MULTI LOGIN 🚨</b>
+<code>────────────────────</code>
+👤 <b>Username</b> : <code>$user</code>
+🌐 <b>Limit IP</b> : <code>$iplimit</code>
+🔍 <b>Terdeteksi</b>: <code>$cekcek Login</code>
+🚫 <b>Status</b>: <b>DI-KICK (Putus Paksa)</b>
+<code>────────────────────</code>"
+    
+    # Tombol callback -> bot akan menerima data "menu" dan menampilkan menu
+    REPLY_MARKUP='{"inline_keyboard":[[{"text":"🔙 Kembali ke Menu","callback_data":"menu"}]]}'
+
+    curl -s --max-time $TIME \
+        -G \
+        --data-urlencode "chat_id=$ADMIN" \
+        --data-urlencode "disable_web_page_preview=1" \
+        --data-urlencode "text=$TEXT" \
+        --data-urlencode "parse_mode=HTML" \
+        --data-urlencode "reply_markup=$REPLY_MARKUP" \
+        "$URL" >/dev/null
+}
+
+tanggal=$(date)
+data=( $(ls /etc/kyt/limit/ssh/ip 2>/dev/null) )
+
+grep -h -E "Accepted|succeeded" /var/log/auth.log 2>/dev/null > /tmp/auth_success_limit.log
+active_pids=$(ps ax -o pid,command 2>/dev/null | grep -E "dropbear|sshd" | grep -v "grep" | awk '{print $1}')
+
+for user in "${data[@]}"; do
+    iplimit=$(cat /etc/kyt/limit/ssh/ip/$user)
+    cekcek=0
+    
+    for pid in $active_pids; do
+        log_entry=$(grep -F "[$pid]" /tmp/auth_success_limit.log | tail -n 1)
+        if [[ -n "$log_entry" ]]; then
+            match_user=$(echo "$log_entry" | awk '{for(i=1;i<=NF;i++) if($i=="for") {gsub(/['\'']/,"",$(i+1)); print $(i+1)}}')
+            if [[ "$match_user" == "$user" ]]; then
+                ((cekcek++))
+            fi
+        fi
+    done
+    
+    if [[ $cekcek -gt $iplimit ]]; then
+        # Catat ke log lokal
+        echo -e "$tanggal\nKICK User: $user | Login: $cekcek | Max: $iplimit IP \n" >> /etc/kyt/log/ssh/ssh.log
+        
+        # Putuskan paksa sesi user
+        pkill -u "$user" dropbear 2>/dev/null
+        pkill -u "$user" sshd 2>/dev/null
+        
+        # Kirim notifikasi ke Telegram
+        send_log
+    fi
+    sleep 0.1
+done
+
+rm -f /tmp/auth_success_limit.log

@@ -1,0 +1,62 @@
+#!/bin/bash
+if ! command -v jq &> /dev/null; then
+    apt-get install jq -y
+fi
+CONFIG_FILE="/etc/zivpn/config.json"
+USER_DB="/etc/zivpn/user-db.json"
+SERVICE_NAME="zivpn.service"
+LOG_FILE="/var/log/xp-zivpn.log"
+TEMP_FILE="/etc/zivpn/config.tmp"  # File temp khusus
+update_config() {
+    if [ -s "$TEMP_FILE" ] && jq . "$TEMP_FILE" >/dev/null 2>&1; then
+        mv "$TEMP_FILE" "$CONFIG_FILE"
+        return 0
+    else
+        echo "$(date): [ERROR] Gagal menulis config (JSON Invalid/Kosong). Restore dibatalkan." >> $LOG_FILE
+        rm -f "$TEMP_FILE"
+        return 1
+    fi
+}
+if [[ ! -f "$USER_DB" ]]; then echo "{}" > "$USER_DB"; fi
+echo "--- Start XP-Zivpn: $(date) ---" >> $LOG_FILE
+while IFS=: read -r username _ uid _ _ _ _; do
+    if [[ $uid -ge 1000 && "$username" != "nobody" ]]; then
+        if ! jq -e --arg u "$username" '.auth.config | index($u)' "$CONFIG_FILE" >/dev/null 2>&1; then
+            jq --arg u "$username" '.auth.config += [$u]' "$CONFIG_FILE" > "$TEMP_FILE"
+            update_config 
+            raw_exp=$(chage -l "$username" | grep "Account expires" | cut -d: -f2)
+            if [[ -z "$raw_exp" || "$raw_exp" == *"never"* ]]; then
+                 exp_iso="2030-01-01" 
+            else
+                 exp_iso=$(date -d "$raw_exp" +"%Y-%m-%d" 2>/dev/null || echo "2030-01-01")
+            fi
+            jq --arg u "$username" --arg e "$exp_iso" '.[$u] = {exp: $e}' "$USER_DB" > "${USER_DB}.tmp" && mv "${USER_DB}.tmp" "$USER_DB"            
+            echo "Sync: User $username ditambahkan." >> $LOG_FILE
+        fi
+    fi
+done < /etc/passwd
+today_sec=$(date +%s)
+users=$(jq -r '.auth.config[]' "$CONFIG_FILE" 2>/dev/null | sort -u)
+for user in $users; do
+    if [[ "$user" == "root" || "$user" == "admin" || "$user" == "zi" ]]; then continue; fi
+    
+    exp=$(jq -r --arg u "$user" '.[$u].exp // "Unknown"' "$USER_DB")
+    
+    if [[ "$exp" != "Unknown" ]]; then
+        exp_sec=$(date -d "$exp" +%s 2>/dev/null)
+        
+        if [[ $? -eq 0 && -n "$exp_sec" && "$exp_sec" -gt 1000 ]]; then
+            if [[ "$today_sec" -gt "$exp_sec" ]]; then
+                echo "User $user expired. Menghapus akses..." >> $LOG_FILE
+                jq --arg u "$user" '.auth.config -= [$u]' "$CONFIG_FILE" > "$TEMP_FILE"
+                update_config
+                jq --arg u "$user" 'del(.[$u])' "$USER_DB" > "${USER_DB}.tmp" && mv "${USER_DB}.tmp" "$USER_DB"
+                passwd -l "$user" &>/dev/null
+            fi
+        fi
+    fi
+done
+jq '.auth.config |= unique' "$CONFIG_FILE" > "$TEMP_FILE"
+update_config
+
+systemctl restart "$SERVICE_NAME"
