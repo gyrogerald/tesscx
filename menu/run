@@ -1,0 +1,131 @@
+#!/bin/bash
+
+NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+BOLD='\033[1m'
+
+# // Definisi Status Indikator (Anti Bocor)
+STS_ON="\033[0;32mON \033[0;32m🟢\033[0m"
+STS_OFF="\033[0;31mOFF \033[0;5;31m🔴\033[0m"
+
+# // Clear Screen
+clear
+print_gradient() {
+    local text="$1"
+    awk -v text="$text" 'BEGIN {
+        len = length(text);
+        r_start=255; g_start=215; b_start=0;
+        r_mid=0;     g_mid=128;   b_mid=255;
+        r_end=138;   g_end=43;    b_end=226;
+        for (i=0; i<len; i++) {
+            ratio = i / (len-1);
+            if (ratio <= 0.5) {
+                f = ratio * 2;
+                r = int(r_start + (r_mid - r_start) * f);
+                g = int(g_start + (g_mid - g_start) * f);
+                b = int(b_start + (b_mid - b_start) * f);
+            } else {
+                f = (ratio - 0.5) * 2;
+                r = int(r_mid + (r_end - r_mid) * f);
+                g = int(g_mid + (g_end - g_mid) * f);
+                b = int(b_mid + (b_end - b_mid) * f);
+            }
+            printf "\033[38;2;%d;%d;%dm%s", r, g, b, substr(text, i+1, 1);
+        }
+        printf "\033[0m\n";
+    }'
+}
+domain=$(cat /etc/xray/domain 2>/dev/null || echo "Domain Not Set")
+IPVPS=$(curl -s ipv4.icanhazip.com)
+os_name=$(grep -w PRETTY_NAME /etc/os-release | head -n1 | sed 's/PRETTY_NAME//g' | sed 's/=//g' | sed 's/"//g')
+tram=$(free -m | awk 'NR==2 {print $2}')
+uram=$(free -m | awk 'NR==2 {print $3}')
+ram_display="$uram MB / $tram MB"
+chk_svc() {
+    if systemctl is-active --quiet "$1"; then echo -e "$STS_ON"; else echo -e "$STS_OFF"; fi
+}
+ssh_service=$(systemctl status ssh | grep Active | awk '{print $3}' | tr -d '()')
+if [[ $ssh_service == "running" ]]; then s_ssh="$STS_ON"; else s_ssh="$STS_OFF"; fi
+
+ovpn=$(systemctl show openvpn.service --no-page | grep 'ActiveState=' | cut -f2 -d=)
+if [[ $ovpn == "active" ]]; then s_ovpn="$STS_ON"; else s_ovpn="$STS_OFF"; fi
+
+db_stat=$(/etc/init.d/dropbear status 2>/dev/null | grep Active | awk '{print $3}' | tr -d '()')
+if [[ $db_stat == "running" ]]; then s_drop="$STS_ON"; else s_drop="$STS_OFF"; fi
+s_haproxy=$(chk_svc haproxy)
+s_nginx=$(chk_svc nginx)
+s_cron=$(chk_svc cron)
+s_xray=$(chk_svc xray)
+s_ws=$(chk_svc ws)
+s_udp=$(chk_svc udp-custom)
+s_bad1=$(chk_svc udp-mini-1)
+s_bad2=$(chk_svc udp-mini-2)
+s_bad3=$(chk_svc udp-mini-3)
+
+s_ip=$(chk_svc netfilter-persistent)
+s_rc=$(chk_svc rc-local)
+BORDER="${CYAN}"
+line() { echo -e "${BORDER} ╭───────────────────────────────────╮${NC}"; }
+mid()  { echo -e "${BORDER} ├───────────────────────────────────┤${NC}"; }
+close(){ echo -e "${BORDER} ╰───────────────────────────────────╯${NC}"; }
+echo -e ""
+print_gradient "╭══════════════════════════════════════════╮"
+print_gradient "│  HOKAGE LEGEND STORE AUTOSCRIPT PREMIUM  │"
+print_gradient "╰══════════════════════════════════════════╯"
+echo -e ""
+line
+echo -e "${BORDER} │ ${WHITE}${BOLD}  SERVER SYSTEM INFORMATION       ${BORDER}│${NC}"
+mid
+printf "${BORDER} │${CYAN}🖥️ %-8s : ${WHITE}%-20s ${BORDER} │${NC}\n" "OS Type" "$os_name"
+printf "${BORDER} │${CYAN}📡 %-7s : ${WHITE}%-20s ${BORDER} │${NC}\n" "IP VPS" "$IPVPS"
+printf "${BORDER} │${CYAN}🌍 %-7s :${WHITE}%-17s ${BORDER}│${NC}\n" "Domain" "$domain"
+printf "${BORDER} │${CYAN}💾 %-7s : ${WHITE}%-20s ${BORDER} │${NC}\n" "RAM" "$ram_display"
+close
+echo -e ""
+print_gradient " ╭──────────────────────╮"
+print_gradient " │  SERVICE INFORMATION │"
+print_gradient " ╰──────────────────────╯"
+line
+printf "${BORDER} │ ${CYAN}⚡ %-24s %b ${BORDER}│${NC}\n" "SSH / TUN Service" "$s_ssh"
+printf "${BORDER} │ ${CYAN}🚀 %-24s %b ${BORDER}│${NC}\n" "SSH UDP / Custom" "$s_udp"
+printf "${BORDER} │ ${CYAN}🕸️  %-24s %b ${BORDER}│${NC}\n" "SSH Websocket Proxy" "$s_ws"
+printf "${BORDER} │ ${CYAN}🛡️  %-24s %b ${BORDER}│${NC}\n" "OpenVPN SSL/TCP/UDP" "$s_ovpn"
+printf "${BORDER} │ ${CYAN}🧸 %-24s %b ${BORDER}│${NC}\n" "Dropbear Service" "$s_drop"
+printf "${BORDER} │ ${CYAN}🐸 %-24s %b ${BORDER}│${NC}\n" "Haproxy Loadbalancer" "$s_haproxy"
+printf "${BORDER} │ ${CYAN}🌏 %-24s %b ${BORDER}│${NC}\n" "Nginx Webserver" "$s_nginx"
+printf "${BORDER} │ ${CYAN}🕰️  %-24s %b ${BORDER}│${NC}\n" "Cron Scheduler" "$s_cron"
+close
+echo -e ""
+print_gradient " ╭──────────────────────╮"
+print_gradient " │     SERVICE XRAY     │"
+print_gradient " ╰──────────────────────╯"
+line
+printf "${BORDER} │ ${CYAN}👻 %-24s %b ${BORDER}│${NC}\n" "Xray Vmess WS/GRPC" "$s_xray"
+printf "${BORDER} │ ${CYAN}👻 %-24s %b ${BORDER}│${NC}\n" "Xray Vless WS/GRPC" "$s_xray"
+printf "${BORDER} │ ${CYAN}👻 %-24s %b ${BORDER}│${NC}\n" "Xray Trojan WS/GRPC" "$s_xray"
+printf "${BORDER} │ ${CYAN}👻 %-24s %b ${BORDER}│${NC}\n" "Xray Shadowsocks" "$s_xray"
+close
+echo -e ""
+print_gradient " ╭──────────────────────╮"
+print_gradient " │    SERVICE BAD VPN   │"
+print_gradient " ╰──────────────────────╯"
+line
+printf "${BORDER} │ ${CYAN}🎮 %-24s %b ${BORDER}│${NC}\n" "BadVPN 7100 (Game)" "$s_bad1"
+printf "${BORDER} │ ${CYAN}🎮 %-24s %b ${BORDER}│${NC}\n" "BadVPN 7200 (Game)" "$s_bad2"
+printf "${BORDER} │ ${CYAN}🎮 %-24s %b ${BORDER}│${NC}\n" "BadVPN 7300 (Game)" "$s_bad3"
+printf "${BORDER} │ ${CYAN}🧱 %-24s %b ${BORDER}│${NC}\n" "Iptables Persistence" "$s_ip"
+printf "${BORDER} │ ${CYAN}📜 %-24s %b ${BORDER}│${NC}\n" "RC Local" "$s_rc"
+printf "${BORDER} │ ${CYAN}🔄 %-24s %b ${BORDER}│${NC}\n" "Auto Reboot" "$s_rc"
+close
+echo -e ""
+line
+echo -e "${BORDER} │ ${WHITE}${BOLD}      CONTACT SUPPORT             ${BORDER}│${NC}"
+mid
+printf "${BORDER} │ ${GREEN}📞 Whatsapp :${WHITE} %-19s ${BORDER}│${NC}\n" "087726917005"
+close
+echo ""
+read -n 1 -s -r -p " Press any key to back on menu"
+menu

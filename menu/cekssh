@@ -1,0 +1,226 @@
+#!/bin/bash
+# ==========================================
+#  HOKAGE LEGEND: ZIVPN MANAGER V7.3
+#  Ultimate: V6.4 Design + V7.2 Permanent Usage
+#  Style: Hybrid (Online = List, Offline = Table)
+# ==========================================
+
+# --- CONFIG & COLORS ---
+USAGE_DB="/etc/ssh/usage_db"
+mkdir -p "$USAGE_DB"
+
+NC='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+WHITE='\033[0;37m'
+YELLOW='\033[0;33m'
+PURPLE='\033[0;35m'
+BLUE='\033[0;34m'
+
+BORDER_LINE="────────────────────────────────────────────────────────────"
+TOP_LINE="╭────────────────────────────────────────────────────────────────────╮"
+MID_LINE="├────────────────────────────────────────────────────────────────────┤"
+BOT_LINE="╰────────────────────────────────────────────────────────────────────╯"
+
+# --- HELPER FUNCTIONS ---
+print_gradient() {
+    local text="$1"
+    awk -v text="$text" 'BEGIN {
+        len = length(text);
+        r_start=255; g_start=215; b_start=0;
+        r_mid=0;     g_mid=128;   b_mid=255;
+        r_end=138;   g_end=43;    b_end=226;
+        for (i=0; i<len; i++) {
+            ratio = i / (len-1);
+            if (ratio <= 0.5) {
+                f = ratio * 2;
+                r = int(r_start + (r_mid - r_start) * f);
+                g = int(g_start + (g_mid - g_start) * f);
+                b = int(b_start + (b_mid - b_start) * f);
+            } else {
+                f = (ratio - 0.5) * 2;
+                r = int(r_mid + (r_end - r_mid) * f);
+                g = int(g_mid + (g_end - g_mid) * f);
+                b = int(b_mid + (b_end - b_mid) * f);
+            }
+            printf "\033[38;2;%d;%d;%dm%s", r, g, b, substr(text, i+1, 1);
+        }
+        printf "\033[0m\n";
+    }'
+}
+
+bytes_to_human() {
+    local b=${1:-0}
+    local d=''
+    local s=0
+    local S=(B KB MB GB TB PB)
+    while ((b > 1024)); do
+        d="$(printf ".%02d" $((b % 1024 * 100 / 1024)))"
+        b=$((b / 1024))
+        let s++
+    done
+    echo "$b$d ${S[$s]}"
+}
+
+# --- SCANNING ANIMATION ---
+clear
+echo -e ""
+print_gradient "╭════════════════════════════════════════════════════════════════════╮"
+print_gradient "│              HOKAGE LEGEND MONITOR (V7.3 STABLE)                   │"
+print_gradient "╰════════════════════════════════════════════════════════════════════╯"
+echo -e ""
+
+start_spinner() {
+    local delay=0.1
+    local spinstr='|/-\'
+    while true; do
+        local temp=${spinstr#?}
+        printf " \r ${CYAN}⏳ Membaca Data & Tabungan Kuota... [%c]${NC}" "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+    done
+}
+start_spinner &
+SPIN_PID=$!
+trap "kill $SPIN_PID 2>/dev/null; exit" SIGINT
+
+# ========================================================
+# V7.3 CORE ENGINE: MAPPING PID KE AUTH.LOG
+# ========================================================
+declare -A on_user
+declare -A on_type
+declare -A user_ips
+declare -A user_pids
+
+# 1. Siapkan log sukses login untuk pelacakan IP
+grep -h -E "Accepted|succeeded" /var/log/auth.log.1 /var/log/auth.log 2>/dev/null > /tmp/auth_success.log
+
+# 2. Ambil PIDs aktif (Mendukung OpenSSH & Dropbear HAProxy)
+active_pids=$(ps ax -o pid,command 2>/dev/null | grep -E "dropbear|sshd" | grep -v "grep" | awk '{print $1}')
+
+# 3. Interogasi setiap PID
+for pid in $active_pids; do
+    log_entry=$(grep -F "[$pid]" /tmp/auth_success.log | tail -n 1)
+    
+    if [[ -n "$log_entry" ]]; then
+        user=$(echo "$log_entry" | awk '{for(i=1;i<=NF;i++) if($i=="for") {gsub(/['\'']/,"",$(i+1)); print $(i+1)}}')
+        ip=$(echo "$log_entry" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | tail -n 1)
+        
+        if [[ -n "$user" ]]; then
+            on_user["$user"]="ONLINE"
+            
+            if echo "$log_entry" | grep -q -i "dropbear"; then
+                on_type["$user"]="Dropbear"
+            else
+                on_type["$user"]="OpenSSH"
+            fi
+
+            if [[ "$ip" == "127.0.0.1" || -z "$ip" ]]; then
+                display_ip="HAProxy/WS"
+            else
+                display_ip="$ip"
+            fi
+            
+            if [[ ! "${user_ips[$user]}" =~ "$display_ip" ]]; then
+                user_ips["$user"]+="$display_ip "
+            fi
+            user_pids["$user"]+="$pid "
+        fi
+    fi
+done
+rm -f /tmp/auth_success.log
+
+# --- PREPARE DATA ---
+BUFFER_ONLINE=""
+BUFFER_OFFLINE=""
+total_ssh=0; total_online=0; total_offline=0
+
+while IFS=: read -r username _ uid _ _ _ shell; do
+    if [[ "$shell" == "/bin/false" || "$shell" == "/usr/sbin/nologin" || "$shell" == "/bin/bash" ]]; then
+        ((total_ssh++))
+
+        # ========================================================
+        # PEMBACAAN DATA USAGE PERMANEN (Dari Tabungan Cronjob)
+        # ========================================================
+        db_file="$USAGE_DB/$username.total"
+        raw_bytes=0
+        if [[ -f "$db_file" ]]; then
+            raw_bytes=$(cat "$db_file" 2>/dev/null)
+            # Pastikan formatnya angka murni
+            if ! [[ "$raw_bytes" =~ ^[0-9]+$ ]]; then raw_bytes=0; fi
+        fi
+
+        human_total=$(bytes_to_human "$raw_bytes")
+
+        if [[ "${on_user[$username]}" == "ONLINE" ]]; then
+            ((total_online++))
+            tipe="${on_type[$username]}"
+            
+            ip_list=$(echo "${user_ips[$username]}" | xargs | sed 's/ /, /g')
+            [ -z "$ip_list" ] && ip_list="-"
+            
+            cnt=$(echo "${user_pids[$username]}" | wc -w)
+
+            # --- MENGAMBIL DATA LIMIT IP ---
+            if [[ -f "/etc/kyt/limit/ssh/ip/$username" ]]; then
+                limit_ip=$(cat "/etc/kyt/limit/ssh/ip/$username")
+            else
+                limit_ip="-"
+            fi
+            
+            # --- INDIKATOR PELANGGARAN ---
+            if [[ "$limit_ip" != "-" && "$cnt" -gt "$limit_ip" ]]; then
+                limit_info="${RED}$cnt (Batas Limit: $limit_ip) ⚠️ OVERLIMIT${NC}"
+            else
+                limit_info="${WHITE}$cnt ${CYAN}(Batas Limit: $limit_ip)${NC}"
+            fi
+
+            BUFFER_ONLINE+=" ${CYAN}${BORDER_LINE}${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}Status     ${NC}: ${GREEN}🟢 ONLINE${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}Username   ${NC}: ${YELLOW}$username${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}IP Address ${NC}: ${CYAN}$ip_list${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}Port Masuk ${NC}: ${PURPLE}443/80 (Via Proxy)${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}Proses Lgn ${NC}: $limit_info\n"
+            BUFFER_ONLINE+=" ${WHITE}Tipe VPN   ${NC}: ${BLUE}$tipe${NC}\n"
+            BUFFER_ONLINE+=" ${WHITE}Data Usage ${NC}: ${GREEN}$human_total${NC}\n"
+        else
+            ((total_offline++))
+            printf -v row "${CYAN} │ ${RED}%-4s ${RED}%-12s ${WHITE}%-15s ${WHITE}%-5s ${WHITE}%-3s ${RED}%-9s ${WHITE}%-10s   ${CYAN}│${NC}\n" "OFF" "${username:0:12}" "-" "-" "-" "OFFLINE" "${human_total:0:10}"
+            BUFFER_OFFLINE+="$row"
+        fi
+    fi
+done < <(awk -F: '$3 >= 1000 && $1 != "nobody" {print $0}' /etc/passwd)
+
+# --- RENDER DISPLAY ---
+kill "$SPIN_PID" 2>/dev/null
+wait "$SPIN_PID" 2>/dev/null
+echo -ne "\r\033[K"
+
+echo -e " ${GREEN}>>> DAFTAR USER ONLINE <<<${NC}"
+if [[ -z "$BUFFER_ONLINE" ]]; then
+     echo -e " ${YELLOW}(Tidak ada user online saat ini)${NC}\n"
+else
+    echo -e "${BUFFER_ONLINE}"
+fi
+echo -e " ${CYAN}${BORDER_LINE}${NC}"
+echo -e ""
+
+echo -e "${CYAN} ${TOP_LINE}${NC}"
+printf "${CYAN} │ ${WHITE}%-4s %-12s %-15s %-5s %-3s %-9s %-10s   ${CYAN}│${NC}\n" "Sts" "Username" "IP Address" "Port" "Lgn" "Tipe" "Data Usage"
+echo -e "${CYAN} ${MID_LINE}${NC}"
+
+if [[ -z "$BUFFER_OFFLINE" ]]; then
+    printf "${CYAN} │ ${YELLOW}%-65s   ${CYAN}│${NC}\n" "                     (Tidak ada user offline)"
+else
+    echo -n "$BUFFER_OFFLINE"
+fi
+echo -e "${CYAN} ${BOT_LINE}${NC}"
+echo -e ""
+
+tgl=$(date +'%H:%M')
+echo -e "${CYAN} ╭────────────────────────────────────────────────────────────────────╮${NC}"
+printf "${CYAN} │ ${WHITE}Total Akun: %-3s ${GREEN}ON: %-3s ${RED}OFF: %-3s ${CYAN}Waktu: %-26s ${CYAN}│${NC}\n" "$total_ssh" "$total_online" "$total_offline" "$tgl"
+echo -e "${CYAN} ╰────────────────────────────────────────────────────────────────────╯${NC}"
+echo -e ""
+read -n 1 -s -r -p " Press any key to back"
