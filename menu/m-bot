@@ -23,8 +23,8 @@ STS_OFF="\033[0;31mOFF \033[0;5;31m🔴\033[0m"
 BORDER="${CYAN}"
 
 # // URL Installer & Izin
-BOT_INSTALLER_URL="https://github.com/hokagelegend9999/alpha.v2/raw/refs/heads/main/bot/bot.sh"
-IPVPES="https://raw.githubusercontent.com/hokagelegend9999/ijin/refs/heads/main/alpha"
+BOT_INSTALLER_URL="https://github.com/gyrogerald/alpha.v2/raw/refs/heads/main/bot/bot.sh"
+IPVPES="https://raw.githubusercontent.com/gyrogerald/ijin/refs/heads/main/alpha"
 
 # // PATH FILE BACKUP (SESUAI REQUEST)
 BACKUP_CMD="/usr/local/sbin/backup"
@@ -396,10 +396,10 @@ echo -e "\e[1;97;101m UPDATING BOT TELEGRAM... \e[0m"
 systemctl stop kyt
 rm -rf /usr/bin/kyt/modules /usr/bin/kyt/shell
 mkdir -p /usr/bin/kyt/modules /usr/bin/kyt/shell
-wget -q -O modules.zip "https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/main/bot/modules.zip"
+wget -q -O modules.zip "https://raw.githubusercontent.com/gyrogerald/alpha.v2/main/bot/modules.zip"
 unzip -o modules.zip -d /usr/bin/kyt/modules/ > /dev/null 2>&1
 if [ -d "/usr/bin/kyt/modules/modules" ]; then mv /usr/bin/kyt/modules/modules/* /usr/bin/kyt/modules/; fi
-wget -q -O shell.zip "https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/main/bot/shell.zip"
+wget -q -O shell.zip "https://raw.githubusercontent.com/gyrogerald/alpha.v2/main/bot/shell.zip"
 unzip -o shell.zip -d /usr/bin/kyt/shell/ > /dev/null 2>&1
 if [ -d "/usr/bin/kyt/shell/shell" ]; then mv /usr/bin/kyt/shell/shell/* /usr/bin/kyt/shell/; fi
 chmod +x -R /usr/bin/kyt/shell/ /usr/bin/kyt/modules/
