@@ -136,7 +136,7 @@ clear
 MYIP=$(curl -sS ipv4.icanhazip.com)
 echo ""
 
-izinsc="https://raw.githubusercontent.com/hokagelegend9999/ijin/refs/heads/main/alpha"
+izinsc="https://raw.githubusercontent.com/gyrogerald/ijin/refs/heads/main/alpha"
 USER_DATA=$(curl -s ${izinsc} | grep $MYIP)
 username=$(echo "$USER_DATA" | awk '{print $2}')
 id_telegram=$(echo "$username" | cut -d '|' -f 1)

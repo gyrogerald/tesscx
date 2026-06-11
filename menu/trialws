@@ -87,7 +87,7 @@ function Loading_Animasi() {
 # ==========================================
 data_server=$(curl -v --insecure --silent https://google.com/ 2>&1 | grep Date | sed -e 's/< Date: //')
 date_list=$(date +"%Y-%m-%d" -d "$data_server")
-data_ip="https://raw.githubusercontent.com/hokagelegend9999/ijin/refs/heads/main/alpha"
+data_ip="https://raw.githubusercontent.com/gyrogerald/ijin/refs/heads/main/alpha"
 
 function checking_sc() {
   useexp=$(curl -sS $data_ip | grep $MYIP | awk '{print $3}')

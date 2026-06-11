@@ -94,7 +94,7 @@ TIMEZONE=$(date +'%H-%M-%S')
 SERONLINE=$(uptime -p | cut -d " " -f 2-10000)
 
 echo ""
-izinsc="https://raw.githubusercontent.com/hokagelegend9999/ijin/refs/heads/main/alpha"
+izinsc="https://raw.githubusercontent.com/gyrogerald/ijin/refs/heads/main/alpha"
 
 # USERNAME CHECK (Cached)
 if [ -f /usr/bin/user ]; then
@@ -437,14 +437,14 @@ case $opt in
 11)
     clear
     rm -f /root/update.sh
-    wget -q https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/refs/heads/main/update.sh
+    wget -q https://raw.githubusercontent.com/gyrogerald/alpha.v2/refs/heads/main/update.sh
     chmod +x update.sh
     ./update.sh
     ;;
 12) clear ; fixcert ;;
 13) clear
     print_install "Menginstall Udp-custom"
-    wget -q https://raw.githubusercontent.com/hokagelegend9999/alpha.v2/refs/heads/main/udp-custom/udp-custom.sh
+    wget -q https://raw.githubusercontent.com/gyrogerald/alpha.v2/refs/heads/main/udp-custom/udp-custom.sh
     chmod +x udp-custom.sh
     bash udp-custom.sh
     rm -fr udp-custom.sh
@@ -453,13 +453,13 @@ case $opt in
 14)
     clear
     rm xray-downgrade
-    wget -q https://github.com/hokagelegend9999/alpha.v2/raw/refs/heads/main/menu/xray-downgrade
+    wget -q https://github.com/gyrogerald/alpha.v2/raw/refs/heads/main/menu/xray-downgrade
     chmod +x xray-downgrade
     ./xray-downgrade
     ;;
 15)
     clear
-    wget -q https://raw.githubusercontent.com/hokagelegend9999/install/refs/heads/main/zivpn
+    wget -q https://raw.githubusercontent.com/gyrogerald/install/refs/heads/main/zivpn
     chmod +x zivpn
     ./zivpn
     systemctl status zivpn

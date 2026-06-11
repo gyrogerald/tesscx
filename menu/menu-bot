@@ -25,7 +25,7 @@ check_ip_and_get_info() {
     return 1 
 }
 echo -e "${GREEN}⌛ Mengambil data lisensi...${NC}"
-permission_file=$(curl -sL --connect-timeout 10 https://raw.githubusercontent.com/hokagelegend9999/ijin/refs/heads/main/alpha)
+permission_file=$(curl -sL --connect-timeout 10 https://raw.githubusercontent.com/gyrogerald/ijin/refs/heads/main/alpha)
 if [ -z "$permission_file" ]; then
 echo -e "${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${RED}🛑  ${YELLOW}AKSES DITOLAK!${NC} ${RED}Script Bot Telegram ini hanya untuk${NC} ${CYAN}🔐 PEMILIK & PEMBELI RESMI ALPHA Pro${NC}"
